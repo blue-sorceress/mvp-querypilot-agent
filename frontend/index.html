@@ -1,0 +1,134 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVP QueryPilot Analytics AI Agent</title>
+    <!-- Tailwind CSS for sleek utility styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 Core Engine -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Chart.js Package -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+
+    <div id="app" class="flex flex-col h-screen" v-cloak>
+        <!-- Header -->
+        <header class="bg-gray-800 border-b border-gray-700 px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="h-3 w-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                <h1 class="text-lg font-bold tracking-wide">MVP QueryPilot Analytics AI Agent</h1>
+            </div>
+            <span class="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-full font-mono">Status: Connected</span>
+        </header>
+
+        <!-- Main Workspace split view -->
+        <main class="flex-1 flex overflow-hidden">
+            
+            <!-- Left Panel: Conversational Controller -->
+            <section class="w-1/3 border-r border-gray-700 flex flex-col bg-gray-850 p-6 space-y-4">
+                <div class="flex-1 flex flex-col justify-end space-y-4 overflow-y-auto pr-2">
+                    <!-- Default Guidance Prompt Card -->
+                    <div v-if="!latestPayload" class="bg-gray-800 border border-gray-700 p-4 rounded-xl text-sm text-gray-400 space-y-2">
+                        <p class="font-semibold text-gray-200">Try the following prompts:</p>
+                        <ul class="list-disc pl-4 space-y-1 text-xs">
+                            <li>"Show me the average platform engagement time grouped by student risk status."</li>
+                            <li>"Give me a list of all students whose wellbeing risk is high, along with their names and current gpa scores."</li>
+                        </ul>
+                    </div>
+
+                    <!-- Conversation Result Display -->
+                    <div v-if="latestPayload" class="bg-gray-800 border border-gray-700 p-4 rounded-xl space-y-3">
+                        <div class="text-xs uppercase tracking-wider text-emerald-400 font-bold">Insights</div>
+                        <p class="text-sm text-gray-300 whitespace-pre-line">{{ latestPayload.insights_narrative }}</p>
+                    </div>
+                </div>
+
+                <!-- Input Interface Form -->
+                <form @submit.prevent="submitQuery" class="space-y-3">
+                    <div class="relative">
+                        <textarea v-model="userPrompt" :disabled="loading" 
+                            class="w-full bg-gray-800 text-sm border border-gray-700 rounded-xl p-4 pr-12 focus:outline-none focus:border-emerald-500 text-gray-100 placeholder-gray-500 resize-none h-24 disabled:opacity-50"
+                            placeholder="Type a prompt regarding the student data..."></textarea>
+                        <button type="submit" :disabled="loading || !userPrompt.trim()"
+                            class="absolute right-3 bottom-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg p-2 transition disabled:opacity-30 disabled:hover:bg-emerald-600">
+                            <span v-if="!loading">Send</span>
+                            <span v-else class="inline-block animate-spin">⏳</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Right Panel: Visual Dashboard Canvas -->
+            <section class="w-2/3 p-8 bg-gray-900 overflow-y-auto flex flex-col space-y-6">
+                <!-- Empty State Canvas Graphic -->
+                <div v-if="!latestPayload && !loading" class="flex-1 flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-2xl">
+                    <span class="text-4xl mb-2">📊</span>
+                    <p class="text-sm font-medium">Please enter a prompt to begin</p>
+                    <p class="text-xs text-gray-700 mt-1">Submit a natural language prompt to generate live metrics</p>
+                </div>
+
+                <!-- Loading Analytics Skeleton -->
+                <div v-if="loading" class="flex-1 flex flex-col items-center justify-center text-emerald-500 space-y-3">
+                    <div class="h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-xs tracking-widest uppercase font-mono animate-pulse">Converting natural language to SQL...</p>
+                </div>
+
+                <!-- Active Dashboard Canvas Elements -->
+                <div v-if="latestPayload && !loading" class="space-y-6 flex-1 flex flex-col">
+                    <!-- Chart Graphic Wrapper Card -->
+                    <div class="bg-gray-800 border border-gray-700 p-6 rounded-2xl flex-1 flex flex-col min-h-[350px]">
+                        <h2 class="text-md font-bold text-gray-200 mb-4 flex items-center justify-between">
+                            <span>{{ latestPayload.visualization_config?.chart_title || 'Data Analytics Output' }}</span>
+                            <span class="text-xs px-2 py-0.5 bg-gray-700 rounded-md text-emerald-400 font-mono">
+                                {{ latestPayload.visualization_config?.chart_type }}
+                            </span>
+                        </h2>
+                        
+                        <!-- Render Chart Canvas if chart_type is bar, line, or pie -->
+                        <div v-show="latestPayload.visualization_config?.chart_type !== 'table'" class="flex-1 relative w-full h-full min-h-[300px]">
+                            <canvas id="agentRenderedChartCanvas"></canvas>
+                        </div>
+
+                        <!-- Fallback Table View: Rendered if chart_type is 'table' -->
+                        <div v-if="latestPayload.visualization_config?.chart_type === 'table'" class="flex-1 overflow-x-auto">
+                            <table class="w-full text-left text-sm border-collapse border border-gray-700 rounded-xl overflow-hidden">
+                                <thead>
+                                    <tr class="bg-gray-900 border-b border-gray-700 text-gray-400 text-xs uppercase font-mono">
+                                        <th v-for="key in Object.keys(latestPayload.dataset[0] || {})" :key="key" class="p-3">
+                                            {{ key }}
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(row, idx) in latestPayload.dataset" :key="idx" class="border-b border-gray-700 hover:bg-gray-750 transition text-gray-300">
+                                        <td v-for="val in Object.values(row)" :key="val" class="p-3 font-mono">
+                                            {{ val }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Under-the-hood Inspection Panel -->
+                    <div class="bg-gray-850 border border-gray-800 rounded-2xl p-5 space-y-3 font-mono text-xs">
+                        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                            <span class="text-gray-400 uppercase tracking-wider font-bold">Executed SQL</span>
+                            <span class="text-gray-600">Read-Only is Enforced</span>
+                        </div>
+                        <pre class="text-emerald-300 p-3 bg-gray-900 rounded-lg overflow-x-auto border border-gray-800"><code>{{ latestPayload.executed_sql }}</code></pre>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+    </div>
+
+    <!-- Found at the very bottom of frontend/index.html -->
+    <script src="app.js"></script>
+</body>
+</html>

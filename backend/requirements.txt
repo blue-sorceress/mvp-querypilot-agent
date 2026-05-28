@@ -1,0 +1,13 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.8.0
+python-dotenv>=1.0.1
+
+# LLM / LangChain stack used by app/agent/engine.py
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+
+# Database access used by app/database/session.py and SQL execution flow
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
